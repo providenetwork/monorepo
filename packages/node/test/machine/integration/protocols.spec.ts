@@ -1,13 +1,11 @@
 import AppWithAction from "@counterfactual/cf-adjudicator-contracts/build/AppWithAction.json";
 import { NetworkContext, OutcomeType } from "@counterfactual/types";
 import { Contract, ContractFactory, Wallet } from "ethers";
-import { Zero } from "ethers/constants";
 import { BaseProvider, JsonRpcProvider } from "ethers/providers";
 import { bigNumberify } from "ethers/utils";
 
 import { CONVENTION_FOR_ETH_TOKEN_ADDRESS } from "../../../src/constants";
-import { Protocol, xkeyKthAddress } from "../../../src/machine";
-import { sortAddresses } from "../../../src/machine/xkeys";
+import { Protocol } from "../../../src/machine";
 import { getCreate2MultisigAddress } from "../../../src/utils";
 
 import { toBeEq } from "./bignumber-jest-matcher";
@@ -18,7 +16,7 @@ import { MiniNode } from "./mininode";
 let network: NetworkContext;
 let provider: JsonRpcProvider;
 let wallet: Wallet;
-let appDefinition: Contract;
+let appWithAction: Contract;
 
 expect.extend({ toBeEq });
 
@@ -31,7 +29,7 @@ beforeAll(async () => {
   [provider, wallet, {}] = await connectToGanache();
   network = global["networkContext"];
 
-  appDefinition = await new ContractFactory(
+  appWithAction = await new ContractFactory(
     AppWithAction.abi,
     AppWithAction.bytecode,
     wallet
@@ -66,47 +64,6 @@ describe("Three mininodes", () => {
 
     await mr.waitForAllPendingPromises();
 
-    const participants = sortAddresses([
-      xkeyKthAddress(mininodeA.xpub, 1),
-      xkeyKthAddress(mininodeB.xpub, 1)
-    ]);
-
-    await mininodeA.ie.initiateProtocol(Protocol.Install, mininodeA.scm, {
-      participants,
-      initiatorXpub: mininodeA.xpub,
-      responderXpub: mininodeB.xpub,
-      multisigAddress: multisigAB,
-      initiatorBalanceDecrement: Zero,
-      responderBalanceDecrement: Zero,
-      initialState: {
-        counter: 0
-      },
-      appInterface: {
-        addr: appDefinition.address,
-        stateEncoding: "tuple(uint256 counter)",
-        actionEncoding: "tuple(uint8 actionType, uint256 increment)"
-      },
-      defaultTimeout: 40,
-      outcomeType: OutcomeType.TWO_PARTY_FIXED_OUTCOME,
-      initiatorDepositTokenAddress: CONVENTION_FOR_ETH_TOKEN_ADDRESS,
-      responderDepositTokenAddress: CONVENTION_FOR_ETH_TOKEN_ADDRESS
-    });
-
-    const appInstances = mininodeA.scm.get(multisigAB)!.appInstances;
-
-    const [key] = [...appInstances.keys()].filter(key => {
-      return key !== mininodeA.scm.get(multisigAB)!.freeBalance.identityHash;
-    });
-
-    await mininodeA.ie.initiateProtocol(Protocol.Uninstall, mininodeA.scm, {
-      appIdentityHash: key,
-      initiatorXpub: mininodeA.xpub,
-      responderXpub: mininodeB.xpub,
-      multisigAddress: multisigAB
-    });
-
-    await mr.waitForAllPendingPromises();
-
     mininodeB.scm.set(
       multisigBC,
       (await mininodeB.ie.runSetupProtocol({
@@ -131,7 +88,7 @@ describe("Three mininodes", () => {
         responderXpub: mininodeC.xpub,
         defaultTimeout: 100,
         appInterface: {
-          addr: appDefinition.address,
+          addr: appWithAction.address,
           stateEncoding: "tuple(uint256 counter)",
           actionEncoding: "tuple(uint8 actionType, uint256 increment)"
         },
@@ -154,7 +111,7 @@ describe("Three mininodes", () => {
         responderXpub: mininodeC.xpub,
         defaultTimeout: 100,
         appInterface: {
-          addr: appDefinition.address,
+          addr: appWithAction.address,
           stateEncoding: "tuple(uint256 counter)",
           actionEncoding: "tuple(uint8 actionType, uint256 increment)"
         },
@@ -218,7 +175,7 @@ describe("Three mininodes", () => {
           {
             counter: 2
           },
-          appDefinition.provider as BaseProvider
+          appWithAction.provider as BaseProvider
         )
       }
     );

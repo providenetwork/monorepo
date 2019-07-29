@@ -20,11 +20,6 @@ let unidirectionalTransferApp: Contract;
 
 expect.extend({ toBeEq });
 
-// enum ActionType {
-//   SUBMIT_COUNTER_INCREMENT,
-//   ACCEPT_INCREMENT
-// }
-
 beforeAll(async () => {
   [provider, wallet, {}] = await connectToGanache();
   network = global["networkContext"];
@@ -63,11 +58,6 @@ describe("Three mininodes", () => {
     });
 
     await mr.waitForAllPendingPromises();
-
-    // const signingKeys = sortAddresses([
-    //   xkeyKthAddress(mininodeA.xpub, 1),
-    //   xkeyKthAddress(mininodeB.xpub, 1)
-    // ]);
 
     const appState = {
       stage: 0, // POST_FUND
