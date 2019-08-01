@@ -22,11 +22,6 @@ import {
 } from "../../src/machine";
 import { install } from "../../src/methods/app-instance/install/operation";
 import { StateChannel } from "../../src/models";
-import {
-  convertCoinTransfersToCoinTransfersMap,
-  deserializeFreeBalanceState,
-  FreeBalanceStateJSON
-} from "../../src/models/free-balance";
 import { Store } from "../../src/store";
 import { MemoryStoreService } from "../services/memory-store-service";
 
@@ -122,15 +117,16 @@ describe("Can handle correct & incorrect installs", () => {
       hdnodes.map(x => x.neuter().extendedKey)
     );
 
-    const balancesForETHToken = convertCoinTransfersToCoinTransfersMap(
-      deserializeFreeBalanceState(stateChannel.freeBalance
-        .state as FreeBalanceStateJSON).balancesIndexedByToken[
-        CONVENTION_FOR_ETH_TOKEN_ADDRESS
-      ]
-    );
-
-    expect(balancesForETHToken[participants[0]]).toEqual(Zero);
-    expect(balancesForETHToken[participants[1]]).toEqual(Zero);
+    expect(
+      stateChannel
+        .getFreeBalanceClass()
+        .getBalance(CONVENTION_FOR_ETH_TOKEN_ADDRESS, participants[0])
+    ).toEqual(Zero);
+    expect(
+      stateChannel
+        .getFreeBalanceClass()
+        .getBalance(CONVENTION_FOR_ETH_TOKEN_ADDRESS, participants[1])
+    ).toEqual(Zero);
 
     await store.saveStateChannel(stateChannel);
 

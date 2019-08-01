@@ -54,6 +54,50 @@ export type TokenIndexedCoinTransferMap = {
 
 export type ActiveAppsMap = { [appInstanceIdentityHash: string]: true };
 
+export class FreeBalanceClass {
+  private constructor(
+    private readonly activeAppsMap: ActiveAppsMap,
+    private readonly balancesIndexedByToken: {
+      // todo: change this type to TokenIndexedCoinTransferMap
+      [tokenAddress: string]: CoinTransfer[];
+    }
+  ) {}
+  public toAppInstance(oldAppInstance: AppInstance) {
+    return oldAppInstance.setState(
+      serializeFreeBalanceState({
+        activeAppsMap: this.activeAppsMap,
+        balancesIndexedByToken: this.balancesIndexedByToken
+      })
+    );
+  }
+  public static fromAppInstance(appInstance: AppInstance): FreeBalanceClass {
+    const freeBalanceState = deserializeFreeBalanceState(
+      appInstance.state as FreeBalanceStateJSON
+    );
+    return new FreeBalanceClass(
+      freeBalanceState.activeAppsMap,
+      freeBalanceState.balancesIndexedByToken
+    );
+  }
+  public getBalance(tokenAddress: string, beneficiary: string) {
+    try {
+      return convertCoinTransfersToCoinTransfersMap(
+        this.balancesIndexedByToken[tokenAddress]
+      )[beneficiary];
+    } catch {
+      return Zero;
+    }
+  }
+  public withTokenAddress(tokenAddress: string): CoinTransferMap | null {
+    if (!this.balancesIndexedByToken[tokenAddress]) {
+      return null;
+    }
+    return convertCoinTransfersToCoinTransfersMap(
+      this.balancesIndexedByToken[tokenAddress]
+    );
+  }
+}
+
 export type FreeBalanceState = {
   activeAppsMap: ActiveAppsMap;
   balancesIndexedByToken: { [tokenAddress: string]: CoinTransfer[] };

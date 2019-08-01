@@ -16,6 +16,7 @@ import {
   CoinTransferMap,
   createFreeBalance,
   deserializeFreeBalanceState,
+  FreeBalanceClass,
   FreeBalanceState,
   FreeBalanceStateJSON,
   getBalancesFromFreeBalanceAppInstance,
@@ -210,6 +211,10 @@ export class StateChannel {
     }
 
     return topLevelKey;
+  }
+
+  public getFreeBalanceClass() {
+    return FreeBalanceClass.fromAppInstance(this.freeBalance);
   }
 
   private build(args: {
