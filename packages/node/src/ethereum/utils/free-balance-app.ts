@@ -1,10 +1,9 @@
 import { AppInterface } from "@counterfactual/types";
 import { Zero } from "ethers/constants";
-import { BigNumber, defaultAbiCoder } from "ethers/utils";
+import { BigNumber } from "ethers/utils";
 
 import {
   CoinTransferMap,
-  FreeBalanceStateJSON,
   TokenIndexedCoinTransferMap
 } from "../../models/free-balance";
 
@@ -25,10 +24,6 @@ export function getFreeBalanceAppInterface(addr: string): AppInterface {
     stateEncoding: freeBalanceAppStateEncoding,
     actionEncoding: undefined // because no actions exist for FreeBalanceApp
   };
-}
-
-export function encodeFreeBalanceAppState(state: FreeBalanceStateJSON) {
-  return defaultAbiCoder.encode([freeBalanceAppStateEncoding], [state]);
 }
 
 export function flipTokenIndexedBalances(

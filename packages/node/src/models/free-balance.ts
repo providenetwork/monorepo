@@ -52,6 +52,7 @@ export type TokenIndexedCoinTransferMap = {
   [tokenAddress: string]: CoinTransferMap;
 };
 
+// todo(xuanji): replace with Set
 export type ActiveAppsMap = { [appInstanceIdentityHash: string]: true };
 
 export class FreeBalanceClass {
@@ -95,6 +96,14 @@ export class FreeBalanceClass {
     return convertCoinTransfersToCoinTransfersMap(
       this.balancesIndexedByToken[tokenAddress]
     );
+  }
+  public removeActiveApp(activeApp: string) {
+    delete this.activeAppsMap[activeApp];
+    return this;
+  }
+  public addActiveApp(activeApp: string) {
+    this.activeAppsMap[activeApp] = true;
+    return this;
   }
 }
 

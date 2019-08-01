@@ -263,36 +263,18 @@ export class StateChannel {
   }
 
   public addActiveApp(activeApp: string) {
-    const json = this.freeBalance.state as FreeBalanceStateJSON;
-
-    const freeBalanceState = deserializeFreeBalanceState(json);
-
-    freeBalanceState.activeAppsMap[activeApp] = true;
-
     return this.build({
-      freeBalanceAppInstance: this.freeBalance.setState(
-        serializeFreeBalanceState(freeBalanceState)
-      )
+      freeBalanceAppInstance: this.getFreeBalanceClass()
+        .addActiveApp(activeApp)
+        .toAppInstance(this.freeBalance)
     });
   }
 
   public removeActiveApp(activeApp: string) {
-    const json = this.freeBalance.state as FreeBalanceStateJSON;
-
-    const freeBalanceState = deserializeFreeBalanceState(json);
-
-    if (!freeBalanceState.activeAppsMap[activeApp]) {
-      throw new Error(
-        "Cannot uninstall app that is not installed in the first place"
-      );
-    }
-
-    delete freeBalanceState.activeAppsMap[activeApp];
-
     return this.build({
-      freeBalanceAppInstance: this.freeBalance.setState(
-        serializeFreeBalanceState(freeBalanceState)
-      )
+      freeBalanceAppInstance: this.getFreeBalanceClass()
+        .removeActiveApp(activeApp)
+        .toAppInstance(this.freeBalance)
     });
   }
 
