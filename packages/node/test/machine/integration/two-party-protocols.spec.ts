@@ -1,8 +1,9 @@
-import IdentityApp from "@counterfactual/contracts/build/IdentityApp.json";
+import IdentityApp from "@counterfactual/cf-funding-protocol-contracts/build/IdentityApp.json";
 import { OutcomeType } from "@counterfactual/types";
-import { ContractFactory } from "ethers";
+import { Contract, ContractFactory, Wallet } from "ethers";
 import { One, Two, Zero } from "ethers/constants";
-import { getAddress } from "ethers/utils";
+import { JsonRpcProvider } from "ethers/providers";
+import { BigNumber, getAddress } from "ethers/utils";
 
 import { CONVENTION_FOR_ETH_TOKEN_ADDRESS } from "../../../src/constants";
 import { Protocol, xkeyKthAddress } from "../../../src/machine";
@@ -21,199 +22,345 @@ const TEST_TOKEN_ADDRESS = getAddress(
 
 expect.extend({ toBeEq });
 
-// before each test case, create two connected MiniNodes, setup a channel
-// and increment their balances of ETH and TEST_TOKEN_ADDRESS in the channel
-async function runTest(outcomeType: OutcomeType, tokenAddress: string) {
-  const [provider, wallet, {}] = await connectToGanache();
-  const network = global["networkContext"];
+enum Participant {
+  A,
+  B
+}
 
-  const identityApp = await new ContractFactory(
-    IdentityApp.abi,
-    IdentityApp.bytecode,
-    wallet
-  ).deploy();
+class TestRunner {
+  private readonly wallet!: Wallet;
+  private identityApp!: Contract;
+  private mininodeA!: MiniNode;
+  private mininodeB!: MiniNode;
+  private multisigAB!: string;
+  private mr!: MessageRouter;
 
-  const mininodeA = new MiniNode(network, provider);
-  const mininodeB = new MiniNode(network, provider);
+  async connectToGanache() {
+    let provider!: JsonRpcProvider;
+    [provider, this.wallet, {}] = await connectToGanache();
+    const network = global["networkContext"];
 
-  const multisigAB = getCreate2MultisigAddress(
-    [mininodeA.xpub, mininodeB.xpub],
-    network.ProxyFactory,
-    network.MinimumViableMultisig
-  );
+    this.identityApp = await new ContractFactory(
+      IdentityApp.abi,
+      IdentityApp.bytecode,
+      this.wallet
+    ).deploy();
 
-  const mr = new MessageRouter([mininodeA, mininodeB]);
+    this.mininodeA = new MiniNode(network, provider);
+    this.mininodeB = new MiniNode(network, provider);
 
-  const stateEncoding = {
-    [OutcomeType.TWO_PARTY_FIXED_OUTCOME]: "uint8",
-    [OutcomeType.SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER]:
-      "tuple(address to, uint256 amount)[2]",
-    [OutcomeType.MULTI_ASSET_MULTI_PARTY_COIN_TRANSFER]:
-      "tuple(address to, uint256 amount)[][]"
-  }[outcomeType];
+    this.multisigAB = getCreate2MultisigAddress(
+      [this.mininodeA.xpub, this.mininodeB.xpub],
+      network.ProxyFactory,
+      network.MinimumViableMultisig
+    );
 
-  const initialState = {
-    [OutcomeType.TWO_PARTY_FIXED_OUTCOME]: 0,
-    [OutcomeType.SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER]: [
-      {
-        to: xkeyKthAddress(mininodeA.xpub, 0),
-        amount: One.add(One)
-      },
-      {
-        to: xkeyKthAddress(mininodeB.xpub, 0),
-        amount: Zero
-      }
-    ],
-    [OutcomeType.MULTI_ASSET_MULTI_PARTY_COIN_TRANSFER]: [
-      [
+    this.mr = new MessageRouter([this.mininodeA, this.mininodeB]);
+  }
+
+  async setup() {
+    this.mininodeA.scm = await this.mininodeA.ie.runSetupProtocol({
+      initiatorXpub: this.mininodeA.xpub,
+      responderXpub: this.mininodeB.xpub,
+      multisigAddress: this.multisigAB
+    });
+
+    await this.mr.waitForAllPendingPromises();
+  }
+
+  async unsafeFund() {
+    for (const sc of this.mininodeA.scm) {
+      this.mininodeA.scm.set(
+        sc[0],
+        sc[1].incrementFreeBalance({
+          [CONVENTION_FOR_ETH_TOKEN_ADDRESS]: {
+            [sc[1].getFreeBalanceAddrOf(this.mininodeA.xpub)]: One,
+            [sc[1].getFreeBalanceAddrOf(this.mininodeB.xpub)]: One
+          },
+          [TEST_TOKEN_ADDRESS]: {
+            [sc[1].getFreeBalanceAddrOf(this.mininodeA.xpub)]: One,
+            [sc[1].getFreeBalanceAddrOf(this.mininodeB.xpub)]: One
+          }
+        })
+      );
+    }
+    for (const sc of this.mininodeB.scm) {
+      this.mininodeB.scm.set(
+        sc[0],
+        sc[1].incrementFreeBalance({
+          [CONVENTION_FOR_ETH_TOKEN_ADDRESS]: {
+            [sc[1].getFreeBalanceAddrOf(this.mininodeA.xpub)]: One,
+            [sc[1].getFreeBalanceAddrOf(this.mininodeB.xpub)]: One
+          },
+          [TEST_TOKEN_ADDRESS]: {
+            [sc[1].getFreeBalanceAddrOf(this.mininodeA.xpub)]: One,
+            [sc[1].getFreeBalanceAddrOf(this.mininodeB.xpub)]: One
+          }
+        })
+      );
+    }
+  }
+
+  async installEqualDeposits(outcomeType: OutcomeType, tokenAddress: string) {
+    const stateEncoding = {
+      [OutcomeType.TWO_PARTY_FIXED_OUTCOME]: "uint8",
+      [OutcomeType.SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER]:
+        "tuple(address to, uint256 amount)[2]",
+      [OutcomeType.MULTI_ASSET_MULTI_PARTY_COIN_TRANSFER]:
+        "tuple(address to, uint256 amount)[][]"
+    }[outcomeType];
+
+    const initialState = {
+      [OutcomeType.TWO_PARTY_FIXED_OUTCOME]: 0,
+      [OutcomeType.SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER]: [
         {
-          to: xkeyKthAddress(mininodeA.xpub, 0),
-          amount: One.add(One)
+          to: xkeyKthAddress(this.mininodeA.xpub, 0),
+          amount: Two
         },
         {
-          to: xkeyKthAddress(mininodeB.xpub, 0),
+          to: xkeyKthAddress(this.mininodeB.xpub, 0),
           amount: Zero
         }
+      ],
+      [OutcomeType.MULTI_ASSET_MULTI_PARTY_COIN_TRANSFER]: [
+        [
+          {
+            to: xkeyKthAddress(this.mininodeA.xpub, 0),
+            amount: Two
+          },
+          {
+            to: xkeyKthAddress(this.mininodeB.xpub, 0),
+            amount: Zero
+          }
+        ]
       ]
-    ]
-  }[outcomeType];
+    }[outcomeType];
 
-  mininodeA.scm = await mininodeA.ie.runSetupProtocol({
-    initiatorXpub: mininodeA.xpub,
-    responderXpub: mininodeB.xpub,
-    multisigAddress: multisigAB
-  });
+    const participants = sortAddresses([
+      xkeyKthAddress(this.mininodeA.xpub, 1),
+      xkeyKthAddress(this.mininodeB.xpub, 1)
+    ]);
 
-  await mr.waitForAllPendingPromises();
-
-  for (const sc of mininodeA.scm) {
-    mininodeA.scm.set(
-      sc[0],
-      sc[1].incrementFreeBalance({
-        [CONVENTION_FOR_ETH_TOKEN_ADDRESS]: {
-          [sc[1].getFreeBalanceAddrOf(mininodeA.xpub)]: One,
-          [sc[1].getFreeBalanceAddrOf(mininodeB.xpub)]: One
+    await this.mininodeA.ie.initiateProtocol(
+      Protocol.Install,
+      this.mininodeA.scm,
+      {
+        participants,
+        outcomeType,
+        initialState,
+        initiatorXpub: this.mininodeA.xpub,
+        responderXpub: this.mininodeB.xpub,
+        multisigAddress: this.multisigAB,
+        initiatorBalanceDecrement: One,
+        responderBalanceDecrement: One,
+        appInterface: {
+          stateEncoding,
+          addr: this.identityApp.address,
+          actionEncoding: undefined
         },
-        [TEST_TOKEN_ADDRESS]: {
-          [sc[1].getFreeBalanceAddrOf(mininodeA.xpub)]: One,
-          [sc[1].getFreeBalanceAddrOf(mininodeB.xpub)]: One
-        }
-      })
-    );
-  }
-  for (const sc of mininodeB.scm) {
-    mininodeB.scm.set(
-      sc[0],
-      sc[1].incrementFreeBalance({
-        [CONVENTION_FOR_ETH_TOKEN_ADDRESS]: {
-          [sc[1].getFreeBalanceAddrOf(mininodeA.xpub)]: One,
-          [sc[1].getFreeBalanceAddrOf(mininodeB.xpub)]: One
-        },
-        [TEST_TOKEN_ADDRESS]: {
-          [sc[1].getFreeBalanceAddrOf(mininodeA.xpub)]: One,
-          [sc[1].getFreeBalanceAddrOf(mininodeB.xpub)]: One
-        }
-      })
+        defaultTimeout: 40,
+        initiatorDepositTokenAddress: tokenAddress,
+        responderDepositTokenAddress: tokenAddress
+      }
     );
   }
 
-  const participants = sortAddresses([
-    xkeyKthAddress(mininodeA.xpub, 1),
-    xkeyKthAddress(mininodeB.xpub, 1)
-  ]);
+  async installSplitDeposits(
+    outcomeType: OutcomeType,
+    tokenAddressA: string,
+    tokenAddressB: string
+  ) {
+    const stateEncoding = {
+      [OutcomeType.TWO_PARTY_FIXED_OUTCOME]: "uint8",
+      [OutcomeType.SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER]:
+        "tuple(address to, uint256 amount)[2]",
+      [OutcomeType.MULTI_ASSET_MULTI_PARTY_COIN_TRANSFER]:
+        "tuple(address to, uint256 amount)[][]"
+    }[outcomeType];
 
-  await mininodeA.ie.initiateProtocol(Protocol.Install, mininodeA.scm, {
-    participants,
-    outcomeType,
-    initialState,
-    initiatorXpub: mininodeA.xpub,
-    responderXpub: mininodeB.xpub,
-    multisigAddress: multisigAB,
-    initiatorBalanceDecrement: One,
-    responderBalanceDecrement: One,
-    appInterface: {
-      stateEncoding,
-      addr: identityApp.address,
-      actionEncoding: undefined
-    },
-    defaultTimeout: 40,
-    initiatorDepositTokenAddress: tokenAddress,
-    responderDepositTokenAddress: tokenAddress
-  });
+    const initialState = {
+      [OutcomeType.TWO_PARTY_FIXED_OUTCOME]: 0,
+      [OutcomeType.SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER]: [
+        {
+          to: xkeyKthAddress(this.mininodeA.xpub, 0),
+          amount: Two
+        },
+        {
+          to: xkeyKthAddress(this.mininodeB.xpub, 0),
+          amount: Zero
+        }
+      ],
+      [OutcomeType.MULTI_ASSET_MULTI_PARTY_COIN_TRANSFER]: [
+        [
+          {
+            to: xkeyKthAddress(this.mininodeA.xpub, 0),
+            amount: Two
+          },
+          {
+            to: xkeyKthAddress(this.mininodeB.xpub, 0),
+            amount: Zero
+          }
+        ]
+      ]
+    }[outcomeType];
 
-  expect(
-    getBalancesFromFreeBalanceAppInstance(
-      mininodeA.scm.get(multisigAB)!.freeBalance,
-      tokenAddress
-    )[xkeyKthAddress(mininodeA.xpub, 0)]
-  ).toBeEq(Zero);
-  expect(
-    getBalancesFromFreeBalanceAppInstance(
-      mininodeA.scm.get(multisigAB)!.freeBalance,
-      tokenAddress
-    )[xkeyKthAddress(mininodeB.xpub, 0)]
-  ).toBeEq(Zero);
+    const participants = sortAddresses([
+      xkeyKthAddress(this.mininodeA.xpub, 1),
+      xkeyKthAddress(this.mininodeB.xpub, 1)
+    ]);
 
-  const appInstances = mininodeA.scm.get(multisigAB)!.appInstances;
+    await this.mininodeA.ie.initiateProtocol(
+      Protocol.Install,
+      this.mininodeA.scm,
+      {
+        participants,
+        outcomeType,
+        initialState,
+        initiatorXpub: this.mininodeA.xpub,
+        responderXpub: this.mininodeB.xpub,
+        multisigAddress: this.multisigAB,
+        initiatorBalanceDecrement: One,
+        responderBalanceDecrement: One,
+        appInterface: {
+          stateEncoding,
+          addr: this.identityApp.address,
+          actionEncoding: undefined
+        },
+        defaultTimeout: 40,
+        initiatorDepositTokenAddress: tokenAddressA,
+        responderDepositTokenAddress: tokenAddressB
+      }
+    );
+  }
 
-  const [key] = [...appInstances.keys()].filter(key => {
-    return key !== mininodeA.scm.get(multisigAB)!.freeBalance.identityHash;
-  });
+  async uninstall() {
+    const appInstances = this.mininodeA.scm.get(this.multisigAB)!.appInstances;
 
-  await mininodeA.ie.initiateProtocol(Protocol.Uninstall, mininodeA.scm, {
-    appIdentityHash: key,
-    initiatorXpub: mininodeA.xpub,
-    responderXpub: mininodeB.xpub,
-    multisigAddress: multisigAB
-  });
+    const [key] = [...appInstances.keys()].filter(key => {
+      return (
+        key !==
+        this.mininodeA.scm.get(this.multisigAB)!.freeBalance.identityHash
+      );
+    });
 
-  await mr.waitForAllPendingPromises();
+    await this.mininodeA.ie.initiateProtocol(
+      Protocol.Uninstall,
+      this.mininodeA.scm,
+      {
+        appIdentityHash: key,
+        initiatorXpub: this.mininodeA.xpub,
+        responderXpub: this.mininodeB.xpub,
+        multisigAddress: this.multisigAB
+      }
+    );
 
-  expect(
-    getBalancesFromFreeBalanceAppInstance(
-      mininodeA.scm.get(multisigAB)!.freeBalance,
-      tokenAddress
-    )[xkeyKthAddress(mininodeA.xpub, 0)]
-  ).toBeEq(Two);
-  expect(
-    getBalancesFromFreeBalanceAppInstance(
-      mininodeA.scm.get(multisigAB)!.freeBalance,
-      tokenAddress
-    )[xkeyKthAddress(mininodeB.xpub, 0)]
-  ).toBeEq(Zero);
+    await this.mr.waitForAllPendingPromises();
+  }
+
+  assertFB(
+    participant: Participant,
+    tokenAddress: string,
+    expected: BigNumber
+  ) {
+    const mininode = {
+      [Participant.A]: this.mininodeA,
+      [Participant.B]: this.mininodeB
+    }[participant];
+    expect(
+      getBalancesFromFreeBalanceAppInstance(
+        mininode.scm.get(this.multisigAB)!.freeBalance,
+        tokenAddress
+      )[xkeyKthAddress(mininode.xpub, 0)]
+    ).toBeEq(expected);
+  }
+}
+
+async function runEqualDepositTests(
+  outcomeType: OutcomeType,
+  tokenAddress: string
+) {
+  const tr = new TestRunner();
+  await tr.connectToGanache();
+
+  await tr.setup();
+  await tr.unsafeFund();
+  await tr.installEqualDeposits(outcomeType, tokenAddress);
+  tr.assertFB(Participant.A, tokenAddress, Zero);
+  tr.assertFB(Participant.B, tokenAddress, Zero);
+  await tr.uninstall();
+  tr.assertFB(Participant.A, tokenAddress, Two);
+  tr.assertFB(Participant.B, tokenAddress, Zero);
+}
+
+async function runSplitDepositTests(
+  outcomeType: OutcomeType,
+  tokenAddressA: string,
+  tokenAddressB: string
+) {
+  const tr = new TestRunner();
+  await tr.connectToGanache();
+
+  await tr.setup();
+  await tr.unsafeFund();
+  await tr.installSplitDeposits(outcomeType, tokenAddressA, tokenAddressB);
+  tr.assertFB(Participant.A, tokenAddressA, Zero);
+  tr.assertFB(Participant.B, tokenAddressB, Zero);
+  await tr.uninstall();
+  tr.assertFB(Participant.A, tokenAddressA, Two);
+  tr.assertFB(Participant.B, tokenAddressB, Zero);
 }
 
 describe("Install-Uninstall tests", () => {
-  it("direct,TWO_PARTY_FIXED_OUTCOME,ETH", async () => {
-    await runTest(
+  it("TWO_PARTY_FIXED_OUTCOME,ETH/ETH", async () => {
+    await runEqualDepositTests(
       OutcomeType.TWO_PARTY_FIXED_OUTCOME,
       CONVENTION_FOR_ETH_TOKEN_ADDRESS
     );
   });
-  it("direct,TWO_PARTY_FIXED_OUTCOME,ERC20", async () => {
-    await runTest(OutcomeType.TWO_PARTY_FIXED_OUTCOME, TEST_TOKEN_ADDRESS);
+
+  // TWO_PARTY_FIXED,ETH/ERC20: NOT ALLOWED
+
+  it("TWO_PARTY_FIXED_OUTCOME,ERC20/ERC20", async () => {
+    await runEqualDepositTests(
+      OutcomeType.TWO_PARTY_FIXED_OUTCOME,
+      TEST_TOKEN_ADDRESS
+    );
   });
-  it("direct,SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER,ETH", async () => {
-    await runTest(
+
+  it("SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER,ETH/ETH", async () => {
+    await runEqualDepositTests(
       OutcomeType.SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER,
       CONVENTION_FOR_ETH_TOKEN_ADDRESS
     );
   });
-  it("direct,SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER,ERC20", async () => {
-    await runTest(
+  it("SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER,ERC20/ERC20", async () => {
+    await runEqualDepositTests(
       OutcomeType.SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER,
       TEST_TOKEN_ADDRESS
     );
   });
-  it("direct,MULTI,ETH", async () => {
-    await runTest(
+
+  // SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER,ETH/ERC20: NOT ALLOWED
+
+  it("MULTI,ETH", async () => {
+    await runEqualDepositTests(
       OutcomeType.MULTI_ASSET_MULTI_PARTY_COIN_TRANSFER,
       CONVENTION_FOR_ETH_TOKEN_ADDRESS
     );
   });
-  it("direct,MULTI,ERC20", async () => {
-    await runTest(
+  it("MULTI,ERC20", async () => {
+    await runEqualDepositTests(
       OutcomeType.MULTI_ASSET_MULTI_PARTY_COIN_TRANSFER,
+      TEST_TOKEN_ADDRESS
+    );
+  });
+
+  // MULTI,ETH/ERC20: TODO
+
+  it("MULTI,SPLIT", async () => {
+    await runSplitDepositTests(
+      OutcomeType.MULTI_ASSET_MULTI_PARTY_COIN_TRANSFER,
+      CONVENTION_FOR_ETH_TOKEN_ADDRESS,
       TEST_TOKEN_ADDRESS
     );
   });
