@@ -1,8 +1,7 @@
 import IdentityApp from "@counterfactual/cf-funding-protocol-contracts/build/IdentityApp.json";
 import { OutcomeType } from "@counterfactual/types";
-import { Contract, ContractFactory, Wallet } from "ethers";
+import { Contract, ContractFactory } from "ethers";
 import { One, Two, Zero } from "ethers/constants";
-import { JsonRpcProvider } from "ethers/providers";
 import { BigNumber, getAddress } from "ethers/utils";
 
 import { CONVENTION_FOR_ETH_TOKEN_ADDRESS } from "../../../src/constants";
@@ -24,36 +23,39 @@ expect.extend({ toBeEq });
 
 enum Participant {
   A,
-  B
+  B,
+  C
 }
 
 class TestRunner {
-  private readonly wallet!: Wallet;
   private identityApp!: Contract;
   private mininodeA!: MiniNode;
   private mininodeB!: MiniNode;
+  private mininodeC!: MiniNode;
   private multisigAB!: string;
   private mr!: MessageRouter;
 
   async connectToGanache() {
-    let provider!: JsonRpcProvider;
-    [provider, this.wallet, {}] = await connectToGanache();
+    const [provider, wallet, {}] = await connectToGanache();
     const network = global["networkContext"];
 
     this.identityApp = await new ContractFactory(
       IdentityApp.abi,
       IdentityApp.bytecode,
-      this.wallet
+      wallet
     ).deploy();
 
     this.mininodeA = new MiniNode(network, provider);
     this.mininodeB = new MiniNode(network, provider);
+    this.mininodeC = new MiniNode(network, provider);
 
     this.multisigAB = getCreate2MultisigAddress(
       [this.mininodeA.xpub, this.mininodeB.xpub],
       network.ProxyFactory,
       network.MinimumViableMultisig
     );
+
+    // todo msBC
 
     this.mr = new MessageRouter([this.mininodeA, this.mininodeB]);
   }
@@ -68,6 +70,10 @@ class TestRunner {
     await this.mr.waitForAllPendingPromises();
   }
 
+  /*
+  Adds one ETH and one TEST_TOKEN to the free balance of everyone. Note this
+  does not actually transfer any tokens.
+  */
   async unsafeFund() {
     for (const sc of this.mininodeA.scm) {
       this.mininodeA.scm.set(
