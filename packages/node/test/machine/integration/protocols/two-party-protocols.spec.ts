@@ -91,9 +91,6 @@ describe("Install-Uninstall tests", () => {
       TEST_TOKEN_ADDRESS
     );
   });
-
-  // MULTI,ETH/ERC20: TODO
-
   it("MULTI,SPLIT", async () => {
     await runSplitDepositTests(
       OutcomeType.MULTI_ASSET_MULTI_PARTY_COIN_TRANSFER,

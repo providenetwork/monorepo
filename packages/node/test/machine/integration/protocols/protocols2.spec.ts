@@ -4,14 +4,14 @@ import { Contract, ContractFactory, Wallet } from "ethers";
 import { Zero } from "ethers/constants";
 import { BaseProvider, JsonRpcProvider } from "ethers/providers";
 
-import { CONVENTION_FOR_ETH_TOKEN_ADDRESS } from "../../../src/constants";
-import { Protocol, xkeyKthAddress } from "../../../src/machine";
-import { getCreate2MultisigAddress } from "../../../src/utils";
+import { CONVENTION_FOR_ETH_TOKEN_ADDRESS } from "../../../../src/constants";
+import { Protocol, xkeyKthAddress } from "../../../../src/machine";
+import { getCreate2MultisigAddress } from "../../../../src/utils";
 
-import { toBeEq } from "./bignumber-jest-matcher";
-import { connectToGanache } from "./connect-ganache";
-import { MessageRouter } from "./message-router";
-import { MiniNode } from "./mininode";
+import { toBeEq } from "../bignumber-jest-matcher";
+import { connectToGanache } from "../connect-ganache";
+import { MessageRouter } from "../message-router";
+import { MiniNode } from "../mininode";
 
 let network: NetworkContext;
 let provider: JsonRpcProvider;
