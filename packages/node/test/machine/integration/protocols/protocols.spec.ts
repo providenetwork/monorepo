@@ -8,6 +8,7 @@ import { CONVENTION_FOR_ETH_TOKEN_ADDRESS } from "../../../../src/constants";
 import { Protocol } from "../../../../src/machine";
 import { toBeEq } from "../bignumber-jest-matcher";
 import { connectToGanache } from "../connect-ganache";
+
 import { TestRunner } from "./test-runner";
 
 let wallet: Wallet;
@@ -32,7 +33,6 @@ beforeAll(async () => {
 
 describe("Three mininodes", () => {
   it("Can run all the protocols", async () => {
-
     const tr = new TestRunner();
     await tr.connectToGanache();
 
@@ -77,16 +77,20 @@ describe("Three mininodes", () => {
       }
     });
 
-    await tr.mininodeA.ie.initiateProtocol(Protocol.TakeAction, tr.mininodeA.scm, {
-      initiatorXpub: tr.mininodeA.xpub,
-      responderXpub: tr.mininodeC.xpub,
-      multisigAddress: tr.multisigAC,
-      appIdentityHash: virtualAppInstance.identityHash,
-      action: {
-        actionType: ActionType.SUBMIT_COUNTER_INCREMENT,
-        increment: 1
+    await tr.mininodeA.ie.initiateProtocol(
+      Protocol.TakeAction,
+      tr.mininodeA.scm,
+      {
+        initiatorXpub: tr.mininodeA.xpub,
+        responderXpub: tr.mininodeC.xpub,
+        multisigAddress: tr.multisigAC,
+        appIdentityHash: virtualAppInstance.identityHash,
+        action: {
+          actionType: ActionType.SUBMIT_COUNTER_INCREMENT,
+          increment: 1
+        }
       }
-    });
+    );
 
     await tr.mininodeA.ie.initiateProtocol(
       Protocol.UninstallVirtualApp,

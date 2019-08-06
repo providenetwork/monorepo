@@ -2,6 +2,7 @@ import IdentityApp from "@counterfactual/cf-funding-protocol-contracts/build/Ide
 import { OutcomeType } from "@counterfactual/types";
 import { Contract, ContractFactory } from "ethers";
 import { One, Two, Zero } from "ethers/constants";
+import { JsonRpcProvider } from "ethers/providers";
 import { BigNumber, getAddress } from "ethers/utils";
 
 import { CONVENTION_FOR_ETH_TOKEN_ADDRESS } from "../../../../src/constants";
@@ -13,7 +14,6 @@ import { toBeEq } from "../bignumber-jest-matcher";
 import { connectToGanache } from "../connect-ganache";
 import { MessageRouter } from "../message-router";
 import { MiniNode } from "../mininode";
-import { JsonRpcProvider } from "ethers/providers";
 
 expect.extend({ toBeEq });
 
@@ -146,7 +146,10 @@ export class TestRunner {
     }
   }
 
-  async installVirtualEqualDeposits(outcomeType: OutcomeType, tokenAddress: string) {
+  async installVirtualEqualDeposits(
+    outcomeType: OutcomeType,
+    tokenAddress: string
+  ) {
     const stateEncoding = {
       [OutcomeType.TWO_PARTY_FIXED_OUTCOME]: "uint8",
       [OutcomeType.SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER]:
@@ -198,8 +201,7 @@ export class TestRunner {
           addr: this.identityApp.address,
           actionEncoding: undefined
         },
-        defaultTimeout: 40,
-
+        defaultTimeout: 40
       }
     );
   }
@@ -391,13 +393,22 @@ export class TestRunner {
   ) {
     const mininode = {
       [Participant.A]: this.mininodeA,
-      [Participant.B]: this.mininodeB
+      [Participant.B]: this.mininodeB,
+      [Participant.C]: this.mininodeC
     }[participant];
-    expect(
-      getBalancesFromFreeBalanceAppInstance(
-        mininode.scm.get(this.multisigAB)!.freeBalance,
-        tokenAddress
-      )[xkeyKthAddress(mininode.xpub, 0)]
-    ).toBeEq(expected);
+    for (const multisig in [
+      this.multisigAB,
+      this.multisigBC,
+      this.multisigAC
+    ]) {
+      if (mininode.scm.has(multisig)) {
+        expect(
+          getBalancesFromFreeBalanceAppInstance(
+            mininode.scm.get(multisig)!.freeBalance,
+            tokenAddress
+          )[xkeyKthAddress(mininode.xpub, 0)]
+        ).toBeEq(expected);
+      }
+    }
   }
 }
