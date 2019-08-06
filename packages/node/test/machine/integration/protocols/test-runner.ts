@@ -4,16 +4,16 @@ import { Contract, ContractFactory } from "ethers";
 import { One, Two, Zero } from "ethers/constants";
 import { BigNumber, getAddress } from "ethers/utils";
 
-import { CONVENTION_FOR_ETH_TOKEN_ADDRESS } from "../../../src/constants";
-import { Protocol, xkeyKthAddress } from "../../../src/machine";
-import { sortAddresses } from "../../../src/machine/xkeys";
-import { getBalancesFromFreeBalanceAppInstance } from "../../../src/models/free-balance";
-import { getCreate2MultisigAddress } from "../../../src/utils";
+import { CONVENTION_FOR_ETH_TOKEN_ADDRESS } from "../../../../src/constants";
+import { Protocol, xkeyKthAddress } from "../../../../src/machine";
+import { sortAddresses } from "../../../../src/machine/xkeys";
+import { getBalancesFromFreeBalanceAppInstance } from "../../../../src/models/free-balance";
+import { getCreate2MultisigAddress } from "../../../../src/utils";
 
-import { toBeEq } from "./bignumber-jest-matcher";
-import { connectToGanache } from "./connect-ganache";
-import { MessageRouter } from "./message-router";
-import { MiniNode } from "./mininode";
+import { toBeEq } from "../bignumber-jest-matcher";
+import { connectToGanache } from "../connect-ganache";
+import { MessageRouter } from "../message-router";
+import { MiniNode } from "../mininode";
 
 const TEST_TOKEN_ADDRESS = getAddress(
   "88a5c2d9919e46f883eb62f7b8dd9d0cc45bc290"
@@ -21,18 +21,19 @@ const TEST_TOKEN_ADDRESS = getAddress(
 
 expect.extend({ toBeEq });
 
-enum Participant {
+export enum Participant {
   A,
   B,
   C
 }
 
-class TestRunner {
+export class TestRunner {
   private identityApp!: Contract;
   private mininodeA!: MiniNode;
   private mininodeB!: MiniNode;
   private mininodeC!: MiniNode;
   private multisigAB!: string;
+  private multisigBC!: string;
   private mr!: MessageRouter;
 
   async connectToGanache() {
@@ -55,9 +56,15 @@ class TestRunner {
       network.MinimumViableMultisig
     );
 
-    // todo msBC
+    this.multisigBC = getCreate2MultisigAddress(
+      [this.mininodeB.xpub, this.mininodeC.xpub],
+      network.ProxyFactory,
+      network.MinimumViableMultisig
+    );
 
-    this.mr = new MessageRouter([this.mininodeA, this.mininodeB]);
+    expect(this.multisigBC);
+
+    this.mr = new MessageRouter([this.mininodeA, this.mininodeB, this.mininodeC]);
   }
 
   async setup() {
@@ -281,93 +288,3 @@ class TestRunner {
   }
 }
 
-async function runEqualDepositTests(
-  outcomeType: OutcomeType,
-  tokenAddress: string
-) {
-  const tr = new TestRunner();
-  await tr.connectToGanache();
-
-  await tr.setup();
-  await tr.unsafeFund();
-  await tr.installEqualDeposits(outcomeType, tokenAddress);
-  tr.assertFB(Participant.A, tokenAddress, Zero);
-  tr.assertFB(Participant.B, tokenAddress, Zero);
-  await tr.uninstall();
-  tr.assertFB(Participant.A, tokenAddress, Two);
-  tr.assertFB(Participant.B, tokenAddress, Zero);
-}
-
-async function runSplitDepositTests(
-  outcomeType: OutcomeType,
-  tokenAddressA: string,
-  tokenAddressB: string
-) {
-  const tr = new TestRunner();
-  await tr.connectToGanache();
-
-  await tr.setup();
-  await tr.unsafeFund();
-  await tr.installSplitDeposits(outcomeType, tokenAddressA, tokenAddressB);
-  tr.assertFB(Participant.A, tokenAddressA, Zero);
-  tr.assertFB(Participant.B, tokenAddressB, Zero);
-  await tr.uninstall();
-  tr.assertFB(Participant.A, tokenAddressA, Two);
-  tr.assertFB(Participant.B, tokenAddressB, Zero);
-}
-
-describe("Install-Uninstall tests", () => {
-  it("TWO_PARTY_FIXED_OUTCOME,ETH/ETH", async () => {
-    await runEqualDepositTests(
-      OutcomeType.TWO_PARTY_FIXED_OUTCOME,
-      CONVENTION_FOR_ETH_TOKEN_ADDRESS
-    );
-  });
-
-  // TWO_PARTY_FIXED,ETH/ERC20: NOT ALLOWED
-
-  it("TWO_PARTY_FIXED_OUTCOME,ERC20/ERC20", async () => {
-    await runEqualDepositTests(
-      OutcomeType.TWO_PARTY_FIXED_OUTCOME,
-      TEST_TOKEN_ADDRESS
-    );
-  });
-
-  it("SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER,ETH/ETH", async () => {
-    await runEqualDepositTests(
-      OutcomeType.SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER,
-      CONVENTION_FOR_ETH_TOKEN_ADDRESS
-    );
-  });
-  it("SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER,ERC20/ERC20", async () => {
-    await runEqualDepositTests(
-      OutcomeType.SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER,
-      TEST_TOKEN_ADDRESS
-    );
-  });
-
-  // SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER,ETH/ERC20: NOT ALLOWED
-
-  it("MULTI,ETH", async () => {
-    await runEqualDepositTests(
-      OutcomeType.MULTI_ASSET_MULTI_PARTY_COIN_TRANSFER,
-      CONVENTION_FOR_ETH_TOKEN_ADDRESS
-    );
-  });
-  it("MULTI,ERC20", async () => {
-    await runEqualDepositTests(
-      OutcomeType.MULTI_ASSET_MULTI_PARTY_COIN_TRANSFER,
-      TEST_TOKEN_ADDRESS
-    );
-  });
-
-  // MULTI,ETH/ERC20: TODO
-
-  it("MULTI,SPLIT", async () => {
-    await runSplitDepositTests(
-      OutcomeType.MULTI_ASSET_MULTI_PARTY_COIN_TRANSFER,
-      CONVENTION_FOR_ETH_TOKEN_ADDRESS,
-      TEST_TOKEN_ADDRESS
-    );
-  });
-});
