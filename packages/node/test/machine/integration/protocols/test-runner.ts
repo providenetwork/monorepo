@@ -61,8 +61,6 @@ export class TestRunner {
       network.MinimumViableMultisig
     );
 
-    expect(this.multisigBC);
-
     this.mr = new MessageRouter([
       this.mininodeA,
       this.mininodeB,
@@ -71,11 +69,25 @@ export class TestRunner {
   }
 
   async setup() {
-    this.mininodeA.scm = await this.mininodeA.ie.runSetupProtocol({
-      initiatorXpub: this.mininodeA.xpub,
-      responderXpub: this.mininodeB.xpub,
-      multisigAddress: this.multisigAB
-    });
+    this.mininodeA.scm.set(
+      this.multisigAB,
+      (await this.mininodeA.ie.runSetupProtocol({
+        initiatorXpub: this.mininodeA.xpub,
+        responderXpub: this.mininodeB.xpub,
+        multisigAddress: this.multisigAB
+      })).get(this.multisigAB)!
+    );
+
+    await this.mr.waitForAllPendingPromises();
+
+    this.mininodeB.scm.set(
+      this.multisigBC,
+      (await this.mininodeB.ie.runSetupProtocol({
+        initiatorXpub: this.mininodeB.xpub,
+        responderXpub: this.mininodeC.xpub,
+        multisigAddress: this.multisigBC
+      })).get(this.multisigBC)!
+    );
 
     await this.mr.waitForAllPendingPromises();
   }
@@ -85,32 +97,35 @@ export class TestRunner {
   does not actually transfer any tokens.
   */
   async unsafeFund() {
-    for (const sc of this.mininodeA.scm) {
-      this.mininodeA.scm.set(
-        sc[0],
-        sc[1].incrementFreeBalance({
+    for (const mininode of [this.mininodeA, this.mininodeB]) {
+      const sc = mininode.scm.get(this.multisigAB)!;
+      mininode.scm.set(
+        this.multisigAB,
+        sc.incrementFreeBalance({
           [CONVENTION_FOR_ETH_TOKEN_ADDRESS]: {
-            [sc[1].getFreeBalanceAddrOf(this.mininodeA.xpub)]: One,
-            [sc[1].getFreeBalanceAddrOf(this.mininodeB.xpub)]: One
+            [sc.getFreeBalanceAddrOf(this.mininodeA.xpub)]: One,
+            [sc.getFreeBalanceAddrOf(this.mininodeB.xpub)]: One
           },
           [TestRunner.TEST_TOKEN_ADDRESS]: {
-            [sc[1].getFreeBalanceAddrOf(this.mininodeA.xpub)]: One,
-            [sc[1].getFreeBalanceAddrOf(this.mininodeB.xpub)]: One
+            [sc.getFreeBalanceAddrOf(this.mininodeA.xpub)]: One,
+            [sc.getFreeBalanceAddrOf(this.mininodeB.xpub)]: One
           }
         })
       );
     }
-    for (const sc of this.mininodeB.scm) {
-      this.mininodeB.scm.set(
-        sc[0],
-        sc[1].incrementFreeBalance({
+
+    for (const mininode of [this.mininodeB, this.mininodeC]) {
+      const sc = mininode.scm.get(this.multisigBC)!;
+      mininode.scm.set(
+        this.multisigBC,
+        sc.incrementFreeBalance({
           [CONVENTION_FOR_ETH_TOKEN_ADDRESS]: {
-            [sc[1].getFreeBalanceAddrOf(this.mininodeA.xpub)]: One,
-            [sc[1].getFreeBalanceAddrOf(this.mininodeB.xpub)]: One
+            [sc.getFreeBalanceAddrOf(this.mininodeB.xpub)]: One,
+            [sc.getFreeBalanceAddrOf(this.mininodeC.xpub)]: One
           },
           [TestRunner.TEST_TOKEN_ADDRESS]: {
-            [sc[1].getFreeBalanceAddrOf(this.mininodeA.xpub)]: One,
-            [sc[1].getFreeBalanceAddrOf(this.mininodeB.xpub)]: One
+            [sc.getFreeBalanceAddrOf(this.mininodeB.xpub)]: One,
+            [sc.getFreeBalanceAddrOf(this.mininodeC.xpub)]: One
           }
         })
       );
