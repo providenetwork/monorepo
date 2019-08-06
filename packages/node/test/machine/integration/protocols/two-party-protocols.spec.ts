@@ -1,101 +1,73 @@
 import { OutcomeType } from "@counterfactual/types";
 import { Two, Zero } from "ethers/constants";
-import { getAddress } from "ethers/utils";
 
 import { CONVENTION_FOR_ETH_TOKEN_ADDRESS } from "../../../../src/constants";
 import { toBeEq } from "../bignumber-jest-matcher";
-import { TestRunner, Participant } from "./test-runner";
 
-const TEST_TOKEN_ADDRESS = getAddress(
-  "88a5c2d9919e46f883eb62f7b8dd9d0cc45bc290"
-);
+import { Participant, TestRunner } from "./test-runner";
 
 expect.extend({ toBeEq });
 
-async function runEqualDepositTests(
-  outcomeType: OutcomeType,
-  tokenAddress: string
-) {
-  const tr = new TestRunner();
-  await tr.connectToGanache();
-
-  await tr.setup();
-  await tr.unsafeFund();
-  await tr.installEqualDeposits(outcomeType, tokenAddress);
-  tr.assertFB(Participant.A, tokenAddress, Zero);
-  tr.assertFB(Participant.B, tokenAddress, Zero);
-  await tr.uninstall();
-  tr.assertFB(Participant.A, tokenAddress, Two);
-  tr.assertFB(Participant.B, tokenAddress, Zero);
+export enum TokenType {
+  ETH = "ETH",
+  ERC20 = "ERC20",
+  SPLIT = "SPLIT"
 }
 
-async function runSplitDepositTests(
+async function runInstallUninstallTest(
   outcomeType: OutcomeType,
-  tokenAddressA: string,
-  tokenAddressB: string
+  tokenType: TokenType
 ) {
   const tr = new TestRunner();
   await tr.connectToGanache();
 
   await tr.setup();
   await tr.unsafeFund();
-  await tr.installSplitDeposits(outcomeType, tokenAddressA, tokenAddressB);
-  tr.assertFB(Participant.A, tokenAddressA, Zero);
-  tr.assertFB(Participant.B, tokenAddressB, Zero);
-  await tr.uninstall();
-  tr.assertFB(Participant.A, tokenAddressA, Two);
-  tr.assertFB(Participant.B, tokenAddressB, Zero);
+
+  if (tokenType === TokenType.SPLIT) {
+    await tr.installSplitDeposits(
+      outcomeType,
+      CONVENTION_FOR_ETH_TOKEN_ADDRESS,
+      TestRunner.TEST_TOKEN_ADDRESS
+    );
+    tr.assertFB(Participant.A, CONVENTION_FOR_ETH_TOKEN_ADDRESS, Zero);
+    tr.assertFB(Participant.B, TestRunner.TEST_TOKEN_ADDRESS, Zero);
+
+    await tr.uninstall();
+    tr.assertFB(Participant.A, CONVENTION_FOR_ETH_TOKEN_ADDRESS, Two);
+    tr.assertFB(Participant.B, TestRunner.TEST_TOKEN_ADDRESS, Zero);
+  } else {
+    const tokenAddress = {
+      [TokenType.ETH]: CONVENTION_FOR_ETH_TOKEN_ADDRESS,
+      [TokenType.ERC20]: TestRunner.TEST_TOKEN_ADDRESS
+    }[tokenType];
+
+    await tr.installEqualDeposits(outcomeType, tokenAddress);
+    tr.assertFB(Participant.A, tokenAddress, Zero);
+    tr.assertFB(Participant.B, tokenAddress, Zero);
+    await tr.uninstall();
+    tr.assertFB(Participant.A, tokenAddress, Two);
+    tr.assertFB(Participant.B, tokenAddress, Zero);
+  }
 }
 
 describe("Install-Uninstall tests", () => {
-  it("TWO_PARTY_FIXED_OUTCOME,ETH/ETH", async () => {
-    await runEqualDepositTests(
-      OutcomeType.TWO_PARTY_FIXED_OUTCOME,
-      CONVENTION_FOR_ETH_TOKEN_ADDRESS
-    );
-  });
+  for (const outcomeType of [
+    OutcomeType.TWO_PARTY_FIXED_OUTCOME,
+    OutcomeType.SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER,
+    OutcomeType.MULTI_ASSET_MULTI_PARTY_COIN_TRANSFER
+  ]) {
+    for (const tokenType of [TokenType.ETH, TokenType.ERC20, TokenType.SPLIT]) {
+      if (
+        tokenType === TokenType.SPLIT &&
+        outcomeType !== OutcomeType.MULTI_ASSET_MULTI_PARTY_COIN_TRANSFER
+      ) {
+        continue;
+      }
 
-  // TWO_PARTY_FIXED,ETH/ERC20: NOT ALLOWED
-
-  it("TWO_PARTY_FIXED_OUTCOME,ERC20/ERC20", async () => {
-    await runEqualDepositTests(
-      OutcomeType.TWO_PARTY_FIXED_OUTCOME,
-      TEST_TOKEN_ADDRESS
-    );
-  });
-
-  it("SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER,ETH/ETH", async () => {
-    await runEqualDepositTests(
-      OutcomeType.SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER,
-      CONVENTION_FOR_ETH_TOKEN_ADDRESS
-    );
-  });
-  it("SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER,ERC20/ERC20", async () => {
-    await runEqualDepositTests(
-      OutcomeType.SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER,
-      TEST_TOKEN_ADDRESS
-    );
-  });
-
-  // SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER,ETH/ERC20: NOT ALLOWED
-
-  it("MULTI,ETH", async () => {
-    await runEqualDepositTests(
-      OutcomeType.MULTI_ASSET_MULTI_PARTY_COIN_TRANSFER,
-      CONVENTION_FOR_ETH_TOKEN_ADDRESS
-    );
-  });
-  it("MULTI,ERC20", async () => {
-    await runEqualDepositTests(
-      OutcomeType.MULTI_ASSET_MULTI_PARTY_COIN_TRANSFER,
-      TEST_TOKEN_ADDRESS
-    );
-  });
-  it("MULTI,SPLIT", async () => {
-    await runSplitDepositTests(
-      OutcomeType.MULTI_ASSET_MULTI_PARTY_COIN_TRANSFER,
-      CONVENTION_FOR_ETH_TOKEN_ADDRESS,
-      TEST_TOKEN_ADDRESS
-    );
-  });
+      it(`${outcomeType}/${tokenType}`, async () => {
+        await runInstallUninstallTest(outcomeType, tokenType);
+      });
+    }
+  }
 });

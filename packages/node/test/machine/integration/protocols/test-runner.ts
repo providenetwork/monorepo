@@ -9,15 +9,10 @@ import { Protocol, xkeyKthAddress } from "../../../../src/machine";
 import { sortAddresses } from "../../../../src/machine/xkeys";
 import { getBalancesFromFreeBalanceAppInstance } from "../../../../src/models/free-balance";
 import { getCreate2MultisigAddress } from "../../../../src/utils";
-
 import { toBeEq } from "../bignumber-jest-matcher";
 import { connectToGanache } from "../connect-ganache";
 import { MessageRouter } from "../message-router";
 import { MiniNode } from "../mininode";
-
-const TEST_TOKEN_ADDRESS = getAddress(
-  "88a5c2d9919e46f883eb62f7b8dd9d0cc45bc290"
-);
 
 expect.extend({ toBeEq });
 
@@ -28,6 +23,10 @@ export enum Participant {
 }
 
 export class TestRunner {
+  static readonly TEST_TOKEN_ADDRESS = getAddress(
+    "88a5c2d9919e46f883eb62f7b8dd9d0cc45bc290"
+  );
+
   private identityApp!: Contract;
   private mininodeA!: MiniNode;
   private mininodeB!: MiniNode;
@@ -64,7 +63,11 @@ export class TestRunner {
 
     expect(this.multisigBC);
 
-    this.mr = new MessageRouter([this.mininodeA, this.mininodeB, this.mininodeC]);
+    this.mr = new MessageRouter([
+      this.mininodeA,
+      this.mininodeB,
+      this.mininodeC
+    ]);
   }
 
   async setup() {
@@ -90,7 +93,7 @@ export class TestRunner {
             [sc[1].getFreeBalanceAddrOf(this.mininodeA.xpub)]: One,
             [sc[1].getFreeBalanceAddrOf(this.mininodeB.xpub)]: One
           },
-          [TEST_TOKEN_ADDRESS]: {
+          [TestRunner.TEST_TOKEN_ADDRESS]: {
             [sc[1].getFreeBalanceAddrOf(this.mininodeA.xpub)]: One,
             [sc[1].getFreeBalanceAddrOf(this.mininodeB.xpub)]: One
           }
@@ -105,7 +108,7 @@ export class TestRunner {
             [sc[1].getFreeBalanceAddrOf(this.mininodeA.xpub)]: One,
             [sc[1].getFreeBalanceAddrOf(this.mininodeB.xpub)]: One
           },
-          [TEST_TOKEN_ADDRESS]: {
+          [TestRunner.TEST_TOKEN_ADDRESS]: {
             [sc[1].getFreeBalanceAddrOf(this.mininodeA.xpub)]: One,
             [sc[1].getFreeBalanceAddrOf(this.mininodeB.xpub)]: One
           }
@@ -287,4 +290,3 @@ export class TestRunner {
     ).toBeEq(expected);
   }
 }
-
