@@ -28,11 +28,12 @@ export class TestRunner {
   );
 
   private identityApp!: Contract;
-  private mininodeA!: MiniNode;
-  private mininodeB!: MiniNode;
-  private mininodeC!: MiniNode;
-  private multisigAB!: string;
-  private multisigBC!: string;
+  public mininodeA!: MiniNode;
+  public mininodeB!: MiniNode;
+  public mininodeC!: MiniNode;
+  public multisigAB!: string;
+  public multisigAC!: string;
+  public multisigBC!: string;
   private mr!: MessageRouter;
 
   async connectToGanache() {
@@ -51,6 +52,12 @@ export class TestRunner {
 
     this.multisigAB = getCreate2MultisigAddress(
       [this.mininodeA.xpub, this.mininodeB.xpub],
+      network.ProxyFactory,
+      network.MinimumViableMultisig
+    );
+
+    this.multisigAC = getCreate2MultisigAddress(
+      [this.mininodeA.xpub, this.mininodeC.xpub],
       network.ProxyFactory,
       network.MinimumViableMultisig
     );
