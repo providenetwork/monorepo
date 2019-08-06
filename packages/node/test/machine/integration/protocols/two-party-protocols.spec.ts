@@ -51,7 +51,7 @@ async function runInstallUninstallTest(
   }
 }
 
-describe("Install-Uninstall tests", () => {
+describe("Install-then-uninstall in a direct channel", () => {
   for (const outcomeType of [
     OutcomeType.TWO_PARTY_FIXED_OUTCOME,
     OutcomeType.SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER,
@@ -71,3 +71,35 @@ describe("Install-Uninstall tests", () => {
     }
   }
 });
+
+describe("Install-then-uninstall of a virtual app", () => {
+  it("ETH", async () => {
+    const tr = new TestRunner();
+    await tr.connectToGanache();
+
+    await tr.setup();
+    await tr.unsafeFund();
+
+    await tr.installVirtualEqualDeposits(
+      OutcomeType.TWO_PARTY_FIXED_OUTCOME,
+      CONVENTION_FOR_ETH_TOKEN_ADDRESS
+    );
+
+    await tr.uninstallVirtual();
+  });
+
+  it("ERC20", async () => {
+    const tr = new TestRunner();
+    await tr.connectToGanache();
+
+    await tr.setup();
+    await tr.unsafeFund();
+
+    await tr.installVirtualEqualDeposits(
+      OutcomeType.TWO_PARTY_FIXED_OUTCOME,
+      TestRunner.TEST_TOKEN_ADDRESS
+    );
+
+    await tr.uninstallVirtual();
+  });
+})

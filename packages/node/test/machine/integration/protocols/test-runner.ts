@@ -13,6 +13,7 @@ import { toBeEq } from "../bignumber-jest-matcher";
 import { connectToGanache } from "../connect-ganache";
 import { MessageRouter } from "../message-router";
 import { MiniNode } from "../mininode";
+import { JsonRpcProvider } from "ethers/providers";
 
 expect.extend({ toBeEq });
 
@@ -34,10 +35,12 @@ export class TestRunner {
   public multisigAB!: string;
   public multisigAC!: string;
   public multisigBC!: string;
+  public provider!: JsonRpcProvider;
   private mr!: MessageRouter;
 
   async connectToGanache() {
     const [provider, wallet, {}] = await connectToGanache();
+    this.provider = provider;
     const network = global["networkContext"];
 
     this.identityApp = await new ContractFactory(
@@ -75,6 +78,10 @@ export class TestRunner {
     ]);
   }
 
+  /*
+  Run the setup protocol to create the AB and BC channels, and update the
+  state channel maps accordingly
+  */
   async setup() {
     this.mininodeA.scm.set(
       this.multisigAB,
@@ -137,6 +144,64 @@ export class TestRunner {
         })
       );
     }
+  }
+
+  async installVirtualEqualDeposits(outcomeType: OutcomeType, tokenAddress: string) {
+    const stateEncoding = {
+      [OutcomeType.TWO_PARTY_FIXED_OUTCOME]: "uint8",
+      [OutcomeType.SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER]:
+        "tuple(address to, uint256 amount)[2]",
+      [OutcomeType.MULTI_ASSET_MULTI_PARTY_COIN_TRANSFER]:
+        "tuple(address to, uint256 amount)[][]"
+    }[outcomeType];
+
+    const initialState = {
+      [OutcomeType.TWO_PARTY_FIXED_OUTCOME]: 0,
+      [OutcomeType.SINGLE_ASSET_TWO_PARTY_COIN_TRANSFER]: [
+        {
+          to: xkeyKthAddress(this.mininodeA.xpub, 0),
+          amount: Two
+        },
+        {
+          to: xkeyKthAddress(this.mininodeC.xpub, 0),
+          amount: Zero
+        }
+      ],
+      [OutcomeType.MULTI_ASSET_MULTI_PARTY_COIN_TRANSFER]: [
+        [
+          {
+            to: xkeyKthAddress(this.mininodeA.xpub, 0),
+            amount: Two
+          },
+          {
+            to: xkeyKthAddress(this.mininodeC.xpub, 0),
+            amount: Zero
+          }
+        ]
+      ]
+    }[outcomeType];
+
+    await this.mininodeA.ie.initiateProtocol(
+      Protocol.InstallVirtualApp,
+      this.mininodeA.scm,
+      {
+        outcomeType,
+        tokenAddress,
+        initialState,
+        initiatorXpub: this.mininodeA.xpub,
+        intermediaryXpub: this.mininodeB.xpub,
+        responderXpub: this.mininodeC.xpub,
+        initiatorBalanceDecrement: One,
+        responderBalanceDecrement: One,
+        appInterface: {
+          stateEncoding,
+          addr: this.identityApp.address,
+          actionEncoding: undefined
+        },
+        defaultTimeout: 40,
+
+      }
+    );
   }
 
   async installEqualDeposits(outcomeType: OutcomeType, tokenAddress: string) {
@@ -269,6 +334,30 @@ export class TestRunner {
         responderDepositTokenAddress: tokenAddressB
       }
     );
+  }
+
+  async uninstallVirtual() {
+    const [virtualAppInstance] = [
+      ...this.mininodeA.scm.get(this.multisigAC)!.appInstances.values()
+    ];
+
+    await this.mininodeA.ie.initiateProtocol(
+      Protocol.UninstallVirtualApp,
+      this.mininodeA.scm,
+      {
+        // todo(xuanji): this should be computed by the protocol
+        targetOutcome: await virtualAppInstance.computeOutcome(
+          virtualAppInstance.latestState,
+          this.provider
+        ),
+        initiatorXpub: this.mininodeA.xpub,
+        intermediaryXpub: this.mininodeB.xpub,
+        responderXpub: this.mininodeC.xpub,
+        targetAppIdentityHash: virtualAppInstance.identityHash
+      }
+    );
+
+    await this.mr.waitForAllPendingPromises();
   }
 
   async uninstall() {
